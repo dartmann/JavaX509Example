@@ -9,11 +9,16 @@ import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Security;
 import java.security.SignatureException;
+import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
+import java.security.cert.CertificateExpiredException;
+import java.security.cert.CertificateNotYetValidException;
 import java.security.cert.X509Certificate;
 import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x509.BasicConstraints;
@@ -30,14 +35,14 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
  * Use case for creating a X509 certificate with the help of BouncyCastle's
  * {@link X509v3CertificateBuilder}.
  * 
- * @author david
+ * @author David Artmann
  *
  */
 public class NewCertificateExample {
+	
+	private static final Logger LOG = Logger.getLogger(NewCertificateExample.class.getSimpleName());
 
-	public static void main(String[] args)
-			throws UnsupportedEncodingException, NoSuchAlgorithmException, CertIOException, InvalidKeyException,
-			CertificateException, NoSuchProviderException, SignatureException, OperatorCreationException {
+	public static void main(String[] args) {
 		/*
 		 * First of all we need to add the BouncyCastle provider.
 		 */
@@ -53,7 +58,12 @@ public class NewCertificateExample {
 		 * Next we create the serial number. In this example it is just a pseudo
 		 * random number.
 		 */
-		final BigInteger serialNumber = new BigInteger(UUID.randomUUID().toString().getBytes("UTF-8"));
+		BigInteger serialNumber = null;
+		try {
+			serialNumber = new BigInteger(UUID.randomUUID().toString().getBytes("UTF-8"));
+		} catch (UnsupportedEncodingException e) {
+			LOG.log(Level.WARNING, "The given encoding is wrong", e);
+		}
 
 		/*
 		 * Followed by creating the start date of our validity period of the
@@ -78,7 +88,12 @@ public class NewCertificateExample {
 		 * SubjectPublicKeyInfo with the corresponding public key of the key
 		 * pair.
 		 */
-		final KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+		KeyPairGenerator keyPairGenerator = null;
+		try {
+			keyPairGenerator = KeyPairGenerator.getInstance("RSA");
+		} catch (NoSuchAlgorithmException e) {
+			LOG.log(Level.WARNING, "The given algorithm could not be found", e);
+		}
 		keyPairGenerator.initialize(4096);
 		final KeyPair keyPair = keyPairGenerator.genKeyPair();
 		final SubjectPublicKeyInfo subjectPublicKeyInfo = SubjectPublicKeyInfo
@@ -95,21 +110,43 @@ public class NewCertificateExample {
 		 * We add the BasicConstraints extension with false, because we want no
 		 * CA certificate.
 		 */
-		certificateBuilder.addExtension(Extension.basicConstraints, false, new BasicConstraints(false));
+		try {
+			certificateBuilder.addExtension(Extension.basicConstraints, false, new BasicConstraints(false));
+		} catch (CertIOException e) {
+			LOG.log(Level.WARNING, "Error while adding the Basic Constraint extension", e);
+		}
 
 		/*
 		 * Lastly we create the desired certicate as follows.
 		 */
-		final X509Certificate certificate = new JcaX509CertificateConverter()
-				.setProvider(BouncyCastleProvider.PROVIDER_NAME)
-				.getCertificate(certificateBuilder.build(new JcaContentSignerBuilder("SHA256withRSA")
-						.setProvider(BouncyCastleProvider.PROVIDER_NAME).build(keyPair.getPrivate())));
-		certificate.checkValidity(new Date());
-		certificate.verify(keyPair.getPublic());
+		X509Certificate certificate = null;
+		try {
+			certificate = new JcaX509CertificateConverter()
+					.setProvider(BouncyCastleProvider.PROVIDER_NAME)
+					.getCertificate(certificateBuilder.build(new JcaContentSignerBuilder("SHA256withRSA")
+							.setProvider(BouncyCastleProvider.PROVIDER_NAME).build(keyPair.getPrivate())));
+		} catch (CertificateException | OperatorCreationException e) {
+			LOG.log(Level.WARNING, "Error while creating the certificate", e);
+		}
+		try {
+			certificate.checkValidity(new Date());
+		} catch (CertificateExpiredException | CertificateNotYetValidException e) {
+			LOG.log(Level.WARNING, "Certificate is either not yet valid or already expired", e);
+		}
+		try {
+			certificate.verify(keyPair.getPublic());
+		} catch (InvalidKeyException | CertificateException | NoSuchAlgorithmException | NoSuchProviderException
+				| SignatureException e) {
+			LOG.log(Level.WARNING, "Error while verifying the certificate", e);
+		}
 
 		/*
 		 * Printing out result
 		 */
-		System.out.println(new String(Base64.getEncoder().encode(certificate.getEncoded()), "UTF-8"));
+		try {
+			System.out.println(new String(Base64.getEncoder().encode(certificate.getEncoded()), "UTF-8"));
+		} catch (CertificateEncodingException | UnsupportedEncodingException e) {
+			LOG.log(Level.WARNING, "Error while encoding the certificate", e);
+		}
 	}
 }
