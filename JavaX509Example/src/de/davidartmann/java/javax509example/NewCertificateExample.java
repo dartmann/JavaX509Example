@@ -144,7 +144,7 @@ public class NewCertificateExample {
 		 * Printing out result
 		 */
 		try {
-			System.out.println(new String(Base64.getEncoder().encode(certificate.getEncoded()), "UTF-8"));
+			LOG.info(new String(Base64.getEncoder().encode(certificate.getEncoded()), "UTF-8"));
 		} catch (CertificateEncodingException | UnsupportedEncodingException e) {
 			LOG.log(Level.WARNING, "Error while encoding the certificate", e);
 		}
